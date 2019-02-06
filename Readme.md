@@ -1,3 +1,5 @@
+[![Build status](https://ci.appveyor.com/api/projects/status/t3djtth456h5ff3x/branch/master?svg=true)](https://ci.appveyor.com/project/Zvirja/git-sync-creation-date/branch/master) [![Nuget version](https://img.shields.io/nuget/v/git-sync-creation-date.svg)](https://www.nuget.org/git-sync-creation-date)
+
 # git-sync-creation-date
 
 It's a dotnet tool to synchronize file creation date on file system with the commit history. Tool scans the commit history and extract creation date for each file (date when a particular file appeared for the first time).
