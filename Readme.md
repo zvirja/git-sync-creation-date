@@ -10,7 +10,7 @@ It might be useful if your tooling relies on the file creation dates (e.g. to pr
 
 Tool is distributed as a dotnet tool. To install it you should have .NET Core 2.1 installed (or above). Then run the following command:
 ```
-dotnet install -g git-sync-creation-date
+dotnet tool install -g git-sync-creation-date
 ```
 
 # Usage
