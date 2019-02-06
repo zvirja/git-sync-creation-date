@@ -9,13 +9,14 @@ namespace CreationDateSync
 {
     public class Program
     {
-        public static int Main(string[] args)
+        public static int Main()
         {
-            WriteLineConsole("Tool scans your repository and updates file creation attributes to match the dates files appeared in the commit history." +
-                              Environment.NewLine +
-                             "Written by Alex Povar (@zvirja)", ConsoleColor.DarkGray);
+            WriteLineConsole(
+                "Tool scans your repository and updates file creation attributes to match the dates files appeared in the commit history." +
+                Environment.NewLine +
+                "Written by Alex Povar (@zvirja)", ConsoleColor.DarkGray);
             Console.WriteLine();
-            
+
             var sw = Stopwatch.StartNew();
 
             var repositoryPath = GetRepositoryPath();
@@ -31,50 +32,67 @@ namespace CreationDateSync
                 {
                     var repoWorkingDirectory = repo.Info.WorkingDirectory;
 
-                    WriteConsole("Collecting creation dates from commits... ", ConsoleColor.DarkGray);
+                    WriteConsole("Collecting creation dates from commits... ");
                     var creationDates = CollectCreationDates(repo);
-                    WriteLineConsole($" Done! Collected {creationDates.Keys.Count} records.", ConsoleColor.DarkGreen);
+                    WriteLineConsole($"Done! Collected {creationDates.Keys.Count} records.", ConsoleColor.DarkGreen);
 
-                    WriteConsole("Discovering files to process...", ConsoleColor.DarkGray);
-                    var allFiles = CollectAllFiles(repo).ToArray();
-                    WriteLineConsole($" Done! Discovered {allFiles.Length} files.", ConsoleColor.DarkGreen);
+                    WriteConsole("Discovering files to process... ");
+                    var allFiles = CollectAllFiles(repo);
+                    WriteLineConsole("Done!", ConsoleColor.DarkGreen);
 
-                    WriteLineConsole("Updating files...", ConsoleColor.DarkGray);
+                    const int STATUS_UPDATE_BATCH_SIZE = 20;
+                    var warnings = new List<string>();
+                    var processed = 0;
 
-                    int counterUpdated = 0;
-                    int counterWarnings = 0;
+                    void PrintStatus(bool final = false)
+                    {
+                        Console.SetCursorPosition(0, Console.CursorTop);
+                        WriteConsole("Processing files... ");
+                        if (final)
+                            WriteConsole("Done! ", ConsoleColor.DarkGreen);
+                        WriteConsole($"Processed: {processed} ", ConsoleColor.DarkGreen);
+                        WriteConsole($"Warnings: {warnings.Count}",
+                            warnings.Count > 0 ? ConsoleColor.DarkYellow : Console.ForegroundColor);
+                    }
+
                     foreach (var relativePath in allFiles)
                     {
+                        processed++;
+
                         var absolutePath = Path.Combine(repoWorkingDirectory, relativePath);
 
                         if (!creationDates.TryGetValue(relativePath, out var creationDate))
                         {
-                            WriteWarn($"Cannot find info for: {relativePath}");
-                            counterWarnings++;
+                            warnings.Add($"Cannot find info for: {relativePath}");
+                            PrintStatus();
                             continue;
                         }
 
                         if (!File.Exists(absolutePath))
                         {
-                            WriteWarn($"File does not exist: {relativePath}");
-                            counterWarnings++;
+                            warnings.Add($"File does not exist: {relativePath}");
+                            PrintStatus();
                             continue;
                         }
 
                         File.SetCreationTimeUtc(absolutePath, creationDate.UtcDateTime);
-                        WriteLineConsole($"[{creationDate:O}] => {relativePath}");
-                        counterUpdated++;
+                        if (processed % STATUS_UPDATE_BATCH_SIZE == 0)
+                            PrintStatus();
                     }
 
+                    PrintStatus(true);
+
                     Console.WriteLine();
-                    const string tab = "    ";
-                    WriteLineConsole("~~~~~~~~~~~~~~~~~~~~~~~~~~~", ConsoleColor.DarkGray);
-                    WriteLineConsole("STATISTICS", ConsoleColor.DarkGray);
-                    WriteLineConsole($"{tab}Updated: {counterUpdated}", ConsoleColor.DarkGray);
-                    WriteLineConsole(
-                        $"{tab}Skipped: {counterWarnings}",
-                        counterWarnings > 0 ? ConsoleColor.Yellow : ConsoleColor.DarkGray);
-                    WriteLineConsole($"{tab}Time: {sw.ElapsedMilliseconds}ms", ConsoleColor.DarkGray);
+                    WriteLineConsole($"Time elapsed: {sw.ElapsedMilliseconds}ms");
+                    if (warnings.Count > 0)
+                    {
+                        const string tab = "    ";
+                        Console.WriteLine();
+
+                        WriteLineConsole("WARNINGS:", ConsoleColor.DarkYellow);
+                        foreach (var warning in warnings)
+                            WriteLineConsole($"{tab}{warning}", ConsoleColor.DarkYellow);
+                    }
                 }
             }
             catch (Exception ex)
@@ -149,13 +167,12 @@ namespace CreationDateSync
         }
 
         private static void WriteError(string message) => WriteLineConsole("ERROR: " + message, ConsoleColor.Red);
-        private static void WriteWarn(string message) => WriteLineConsole("WARN: " + message, ConsoleColor.Yellow);
 
         private static void WriteConsole(string message, ConsoleColor? color = null)
         {
             using (new ConsoleColorSwitcher(color ?? Console.ForegroundColor))
             {
-               Console.Write(message);
+                Console.Write(message);
             }
         }
 
@@ -173,7 +190,7 @@ namespace CreationDateSync
             {
                 Console.ForegroundColor = color;
             }
-            
+
             public void Dispose()
             {
                 Console.ResetColor();
