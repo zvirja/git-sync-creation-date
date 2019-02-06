@@ -15,4 +15,9 @@ dotnet install -g git-sync-creation-date
 
 # Usage
 
-To run the tool just navigate to a directory which is a part of the repo (usual repository root) and run the `git-sync-creation-date` command from your command line. The tool will update creation date for all the files in the current and nested directories.
+To run the tool just navigate to a directory which is a part of the repo (usual repository root), open command line and run the tool by name:
+```
+git-sync-creation-date
+```
+
+The tool will update creation date for all the files in the current and nested directories.
