@@ -31,6 +31,7 @@ namespace CreationDateSync
                 using (var repo = new Repository(repositoryPath))
                 {
                     var repoWorkingDirectory = repo.Info.WorkingDirectory;
+                    WriteLineConsole($"Current HEAD: {repo.Head.Tip.Sha} ({repo.Head.FriendlyName})");
 
                     WriteConsole("Collecting creation dates from commits... ");
                     var creationDates = CollectCreationDates(repo);
