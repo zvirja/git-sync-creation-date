@@ -36,7 +36,7 @@ namespace CreationDateSync
                     var creationDates = CollectCreationDates(repo);
                     WriteLineConsole($"Done! Collected {creationDates.Keys.Count} records.", ConsoleColor.DarkGreen);
 
-                    WriteConsole("Discovering files to process... ");
+                    WriteConsole("Discovering files to process from the last commit... ");
                     var allFiles = CollectAllFiles(repo);
                     WriteLineConsole("Done!", ConsoleColor.DarkGreen);
 
@@ -159,11 +159,9 @@ namespace CreationDateSync
 
         private static IEnumerable<string> CollectAllFiles(IRepository repo)
         {
-            var committedFiles = repo.Diff.Compare<TreeChanges>(null, repo.Head.Tip.Tree).Select(x => x.Path);
-
-            var workDirectoryStatus = repo.RetrieveStatus();
-            return committedFiles
-                .Except(workDirectoryStatus.Removed.Select(x => x.FilePath));
+            return repo.Diff
+                .Compare<TreeChanges>(null, repo.Head.Tip.Tree)
+                .Select(x => x.Path);
         }
 
         private static void WriteError(string message) => WriteLineConsole("ERROR: " + message, ConsoleColor.Red);
