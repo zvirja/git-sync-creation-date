@@ -1,4 +1,4 @@
-[![Build status](https://ci.appveyor.com/api/projects/status/t3djtth456h5ff3x/branch/master?svg=true)](https://ci.appveyor.com/project/Zvirja/git-sync-creation-date/branch/master) [![Nuget version](https://img.shields.io/nuget/v/git-sync-creation-date.svg)](https://www.nuget.org/git-sync-creation-date)
+[![Build status](https://ci.appveyor.com/api/projects/status/t3djtth456h5ff3x/branch/master?svg=true)](https://ci.appveyor.com/project/Zvirja/git-sync-creation-date/branch/master) [![Nuget version](https://img.shields.io/nuget/v/git-sync-creation-date.svg)](https://www.nuget.org/packages/git-sync-creation-date/)
 
 # git-sync-creation-date
 
