@@ -98,8 +98,6 @@ let setVNextBranchVersion vNextVersion =
                           preSuffix = "-alpha" }
             |> calculateVersion
 
-let mutable enableSourceLink = false
-
 let runMsBuild target configuration properties =
     let verbosity = match getBuildParam "BuildVerbosity" |> toLower with
                     | "quiet" | "q"         -> Quiet
@@ -112,10 +110,6 @@ let runMsBuild target configuration properties =
     let configProperty = match configuration with
                          | Some c -> [ "Configuration", c ]
                          | _ -> []
-
-    let sourceLinkCreatePropertyValue = match enableSourceLink with
-                                        | true  -> "true"
-                                        | false -> "false"
 
     let properties = configProperty @ properties
                      @ [ "AssemblyVersion", buildVersion.assemblyVersion
@@ -130,6 +124,8 @@ let runMsBuild target configuration properties =
                                 Properties = properties })
 
 let rebuild configuration = runMsBuild "Rebuild" (Some configuration) []
+
+Target "RestoreNuGetPackages" (fun _ -> runMsBuild "Restore" None [])
 
 Target "Build" (fun _ -> rebuild configuration)
 
@@ -170,6 +166,8 @@ Target "PublishNuGetPublic" (fun _ ->
 
 Target "CompleteBuild"   DoNothing
 Target "PublishNuGetAll" DoNothing
+
+"RestoreNuGetPackages" ==> "Build"
 
 "CleanNuGetPackages" ==> "NuGetPack"
 "Build"              ==> "NuGetPack"
@@ -229,7 +227,7 @@ dependency "AppVeyor" <| match anAppVeyorTrigger with
                          | PR | CustomTag | Unknown -> "CompleteBuild"
 
 // Print state info at the very beginning.
-if buildServer = BuildServer.AppVeyor 
+if buildServer = BuildServer.AppVeyor
    then logfn "[AppVeyor state] Is tag: %b, tag name: '%s', is PR: %b, branch name: '%s', trigger: %A, build version: '%s'"
               AppVeyorEnvironment.RepoTag 
               AppVeyorEnvironment.RepoTagName 
