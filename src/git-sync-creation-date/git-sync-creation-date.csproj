@@ -5,13 +5,16 @@
         <TargetFramework>netcoreapp2.1</TargetFramework>
         <RootNamespace>CreationDateSync</RootNamespace>
         <PackAsTool>true</PackAsTool>
-        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     </PropertyGroup>
-    
+ 
     <PropertyGroup>
         <Description>Set files creation date to their creation date in Git</Description>
         <Company>Alex Povar</Company>
         <Copyright>Copyright © Alex Povar</Copyright>
+        
+        <Authors>Alex Povar</Authors>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageProjectUrl>https://github.com/zvirja/git-sync-creation-date</PackageProjectUrl>
     </PropertyGroup>
     
     <ItemGroup>
