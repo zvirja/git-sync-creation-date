@@ -1,21 +1,47 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.CommandLine;
+using System.CommandLine.Invocation;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using LibGit2Sharp;
+using static CreationDateSync.ConsoleUtil;
 
 namespace CreationDateSync
 {
-    public class Program
+    internal static class Program
     {
-        public static int Main()
+        public static async Task<int> Main(string[] args)
+        {
+            var rootCmd = new RootCommand
+            {
+                new Option<DateTimeOffset?>(
+                    "--creation-time",
+                    "Date and time to use for files that were committed in the first commit. Useful if repo was migrated from other place. " +
+                    "Format: DateTime in ISO format (e.g. 1994-02-13 or 1994-02-13T17:14:00). " +
+                    "Default: Use initial commit date and time."),
+                new Option<FileInfo>(
+                    "--creation-time-file",
+                    "File with date and time to use for files that were committed in the first commit. Useful if repo was migrated from other place. " +
+                    "Format: A line per file. Each line should contain {relativePath}:DateTime pairs. " +
+                    "Default: Use initial commit date and time.")
+            };
+            rootCmd.Description = "Scan the repository and update the File Creation attribute for committed files to match the dates files appeared in the commit history";
+            rootCmd.Handler = CommandHandler.Create<DateTimeOffset?, FileInfo>(Run);
+
+            return await rootCmd.InvokeAsync(args);
+        }
+
+        private static int Run(DateTimeOffset? creationTime, FileInfo creationTimeFile)
         {
             WriteLineConsole(
-                "Tool scans your repository and updates file creation attributes to match the dates files appeared in the commit history." +
+                "Scanning the repository and updating the File Creation attribute for committed files to match the dates files appeared in the commit history." +
                 Environment.NewLine +
-                "Written by Alex Povar (@zvirja)", ConsoleColor.DarkGray);
-            Console.WriteLine();
+                "Written by Oleksandr Povar (@zvirja)", ConsoleColor.DarkGray);
+            WriteNewLine();
 
             var sw = Stopwatch.StartNew();
 
@@ -28,72 +54,81 @@ namespace CreationDateSync
 
             try
             {
-                using (var repo = new Repository(repositoryPath))
+                using var repo = new Repository(repositoryPath);
+ 
+                var repoWorkingDirectory = repo.Info.WorkingDirectory;
+                WriteLineConsole($"Current HEAD: {repo.Head.Tip.Sha} ({repo.Head.FriendlyName})");
+
+                var creationStamps = new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase);
+
+                if (creationTimeFile != null)
                 {
-                    var repoWorkingDirectory = repo.Info.WorkingDirectory;
-                    WriteLineConsole($"Current HEAD: {repo.Head.Tip.Sha} ({repo.Head.FriendlyName})");
+                    WriteConsole("Importing creation time from file... ");
+                    var importedCount = ImportCreationStampsFromFile(creationTimeFile, creationStamps);
+                    WriteLineConsole($"Done! Imported {importedCount} records.", ConsoleColor.DarkGreen);
+                }
 
-                    WriteConsole("Collecting creation dates from commits... ");
-                    var creationDates = CollectCreationDates(repo);
-                    WriteLineConsole($"Done! Collected {creationDates.Keys.Count} records.", ConsoleColor.DarkGreen);
+                var initialCommitTimeDesc = creationTime != null ? $" (initial commit time: {creationTime.Value:s})" : string.Empty;
+                WriteConsole($"Collecting creation dates from commits{initialCommitTimeDesc}... ");
+                var importedCommitsCount = ImportCreationStampsFromCommits(repo, creationStamps, creationTime);
+                WriteLineConsole($"Done! Collected {importedCommitsCount} new records.", ConsoleColor.DarkGreen);
 
-                    WriteConsole("Discovering files to process from the last commit... ");
-                    var allFiles = CollectAllFiles(repo);
-                    WriteLineConsole("Done!", ConsoleColor.DarkGreen);
+                WriteConsole("Discovering files to process from the last commit... ");
+                var allFiles = CollectAllFiles(repo);
+                WriteLineConsole("Done!", ConsoleColor.DarkGreen);
 
-                    const int STATUS_UPDATE_BATCH_SIZE = 20;
-                    var warnings = new List<string>();
-                    var processed = 0;
+                const int STATUS_UPDATE_BATCH_SIZE = 20;
+                var warnings = new List<string>();
+                var processed = 0;
 
-                    void PrintStatus(bool final = false)
+                void PrintStatus(bool final = false)
+                {
+                    Console.SetCursorPosition(0, Console.CursorTop);
+                    WriteConsole("Processing files... ");
+                    if (final)
+                        WriteConsole("Done! ", ConsoleColor.DarkGreen);
+                    WriteConsole($"Processed: {processed} ", ConsoleColor.DarkGreen);
+                    WriteConsole($"Warnings: {warnings.Count}",
+                        warnings.Count > 0 ? ConsoleColor.DarkYellow : Console.ForegroundColor);
+                }
+
+                foreach (var relativePath in allFiles)
+                {
+                    processed++;
+
+                    var absolutePath = Path.Combine(repoWorkingDirectory, relativePath);
+
+                    if (!creationStamps.TryGetValue(relativePath, out var creationDate))
                     {
-                        Console.SetCursorPosition(0, Console.CursorTop);
-                        WriteConsole("Processing files... ");
-                        if (final)
-                            WriteConsole("Done! ", ConsoleColor.DarkGreen);
-                        WriteConsole($"Processed: {processed} ", ConsoleColor.DarkGreen);
-                        WriteConsole($"Warnings: {warnings.Count}",
-                            warnings.Count > 0 ? ConsoleColor.DarkYellow : Console.ForegroundColor);
+                        warnings.Add($"[Skipped] Cannot find file in commits: {relativePath}");
+                        PrintStatus();
+                        continue;
                     }
 
-                    foreach (var relativePath in allFiles)
+                    if (!File.Exists(absolutePath))
                     {
-                        processed++;
-
-                        var absolutePath = Path.Combine(repoWorkingDirectory, relativePath);
-
-                        if (!creationDates.TryGetValue(relativePath, out var creationDate))
-                        {
-                            warnings.Add($"Cannot find info for: {relativePath}");
-                            PrintStatus();
-                            continue;
-                        }
-
-                        if (!File.Exists(absolutePath))
-                        {
-                            warnings.Add($"File does not exist: {relativePath}");
-                            PrintStatus();
-                            continue;
-                        }
-
-                        File.SetCreationTimeUtc(absolutePath, creationDate.UtcDateTime);
-                        if (processed % STATUS_UPDATE_BATCH_SIZE == 0)
-                            PrintStatus();
+                        warnings.Add($"[Skipped] File no longer exist: {relativePath}");
+                        PrintStatus();
+                        continue;
                     }
 
-                    PrintStatus(true);
+                    File.SetCreationTimeUtc(absolutePath, creationDate.UtcDateTime);
+                    if (processed % STATUS_UPDATE_BATCH_SIZE == 0)
+                        PrintStatus();
+                }
 
+                PrintStatus(true);
+
+                Console.WriteLine();
+                WriteLineConsole($"Time elapsed: {sw.ElapsedMilliseconds}ms");
+                if (warnings.Count > 0)
+                {
+                    const string tab = "    ";
                     Console.WriteLine();
-                    WriteLineConsole($"Time elapsed: {sw.ElapsedMilliseconds}ms");
-                    if (warnings.Count > 0)
-                    {
-                        const string tab = "    ";
-                        Console.WriteLine();
 
-                        WriteLineConsole("WARNINGS:", ConsoleColor.DarkYellow);
-                        foreach (var warning in warnings)
-                            WriteLineConsole($"{tab}{warning}", ConsoleColor.DarkYellow);
-                    }
+                    WriteLineConsole("WARNINGS:", ConsoleColor.DarkYellow);
+                    foreach (var warning in warnings)
+                        WriteLineConsole($"{tab}{warning}", ConsoleColor.DarkYellow);
                 }
             }
             catch (Exception ex)
@@ -119,10 +154,45 @@ namespace CreationDateSync
             return repositoryPath;
         }
 
-        private static Dictionary<string, DateTimeOffset> CollectCreationDates(IRepository repo)
+        private static int ImportCreationStampsFromFile(FileInfo creationStampsFile, Dictionary<string, DateTimeOffset> stamps)
         {
-            var result = new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase);
+            using var fileReader = creationStampsFile.OpenText();
 
+            int linePos = -1;
+            int importedCount = 0;
+
+            try
+            {
+                while (!fileReader.EndOfStream)
+                {
+                    linePos++;
+                    var line = fileReader.ReadLine();
+                    if(string.IsNullOrEmpty(line))
+                        continue;
+                    
+                    var pair = line.Split(':', StringSplitOptions.RemoveEmptyEntries);
+                    var path = pair[0];
+                    var stamp = pair[1];
+ 
+                    // Normalize slashes
+                    path = path.Replace("\\", "/");
+                    
+                    stamps[path] = DateTimeOffset.Parse(stamp, CultureInfo.InvariantCulture);
+                    importedCount++;
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Wrong creation time file format. Error during parsing line {linePos}", ex);
+            }
+
+            return importedCount;
+        }
+
+        private static int ImportCreationStampsFromCommits(IRepository repo, Dictionary<string, DateTimeOffset> stamps, DateTimeOffset? initialCommitTimeOverride)
+        {
+            int importedCount = 0;
+ 
             var commits = repo.Commits
                 .QueryBy(
                     new CommitFilter
@@ -132,30 +202,42 @@ namespace CreationDateSync
                     })
                 .ToArray();
 
+            var initialCommit = commits.First();
+
             foreach (var commit in commits)
             {
                 var commitDate = commit.Committer.When;
+                if (commit == initialCommit && initialCommitTimeOverride != null)
+                {
+                    commitDate = initialCommitTimeOverride.Value;
+                }
 
                 var parentCommit = commit.Parents.FirstOrDefault();
                 var diff = repo.Diff.Compare<TreeChanges>(parentCommit?.Tree, commit.Tree);
 
                 foreach (var change in diff.Added)
                 {
-                    result.TryAdd(change.Path, commitDate);
+                    ImportStamp(change.Path, commitDate);
                 }
 
                 // If item has been renamed (or at least git thinks so), let's try to preserve it's old creation date.
                 foreach (var change in diff.Renamed)
                 {
-                    result.TryAdd(
+                    ImportStamp(
                         change.Path,
-                        result.TryGetValue(change.OldPath, out var oldCreationDate)
+                        stamps.TryGetValue(change.OldPath, out var oldCreationDate)
                             ? oldCreationDate
                             : commitDate);
                 }
             }
 
-            return result;
+            void ImportStamp(string path, DateTimeOffset stamp)
+            {
+                if (stamps.TryAdd(path, stamp))
+                    importedCount++;
+            }
+
+            return importedCount;
         }
 
         private static IEnumerable<string> CollectAllFiles(IRepository repo)
@@ -163,37 +245,6 @@ namespace CreationDateSync
             return repo.Diff
                 .Compare<TreeChanges>(null, repo.Head.Tip.Tree)
                 .Select(x => x.Path);
-        }
-
-        private static void WriteError(string message) => WriteLineConsole("ERROR: " + message, ConsoleColor.Red);
-
-        private static void WriteConsole(string message, ConsoleColor? color = null)
-        {
-            using (new ConsoleColorSwitcher(color ?? Console.ForegroundColor))
-            {
-                Console.Write(message);
-            }
-        }
-
-        private static void WriteLineConsole(string message, ConsoleColor? color = null)
-        {
-            using (new ConsoleColorSwitcher(color ?? Console.ForegroundColor))
-            {
-                Console.WriteLine(message);
-            }
-        }
-
-        private class ConsoleColorSwitcher : IDisposable
-        {
-            public ConsoleColorSwitcher(ConsoleColor color)
-            {
-                Console.ForegroundColor = color;
-            }
-
-            public void Dispose()
-            {
-                Console.ResetColor();
-            }
         }
     }
 }
