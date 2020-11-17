@@ -9,12 +9,13 @@ pull_requests:
 
 build_script:
 - ps: |
-    & .\build.cmd AppVeyor NuGetPublicKey="$($Env:NUGET_API_KEY)" BuildVersion=git BuildNumber=$($Env:APPVEYOR_BUILD_NUMBER)
+    (& cmd /c); [console]::OutputEncoding = New-Object System.Text.UTF8Encoding;
+    & .\build.ps1 --target AppVeyor_Pipeline --nuget-key "$($Env:NUGET_API_KEY)" --build-version git  --build-number $($Env:APPVEYOR_BUILD_NUMBER) --no-logo
 
 test: off
 
 artifacts:
-- path: build\NuGetPackages\*.nupkg
+- path: artifacts\*.nupkg
   name: NuGet
 
 deploy: off
