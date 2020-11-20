@@ -21,3 +21,7 @@ git-sync-creation-date
 ```
 
 The tool will update creation date for all the files in the current and nested directories.
+
+## Options
+
+Run the tool with `--help` or just `-h` flag to see possible options.
