@@ -24,4 +24,4 @@ The tool will update creation date for all the files in the current and nested d
 
 ## Options
 
-Run the tool with `--help` or just `-h` flag to see possible options.
+Run the tool with `--help` or just `-h` flag to see the possible options.
