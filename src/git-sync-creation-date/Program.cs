@@ -30,12 +30,12 @@ namespace CreationDateSync
                     "Default: Use initial commit date and time.")
             };
             rootCmd.Description = "Scan the repository and update the File Creation attribute for committed files to match the dates files appeared in the commit history";
-            rootCmd.Handler = CommandHandler.Create<DateTimeOffset?, FileInfo>(Run);
+            rootCmd.Handler = CommandHandler.Create<DateTimeOffset?, FileInfo?>(Run);
 
             return await rootCmd.InvokeAsync(args);
         }
 
-        private static int Run(DateTimeOffset? creationTime, FileInfo creationTimeFile)
+        private static int Run(DateTimeOffset? creationTime, FileInfo? creationTimeFile)
         {
             WriteLineConsole(
                 "Scanning the repository and updating the File Creation attribute for committed files to match the dates files appeared in the commit history." +
@@ -140,7 +140,7 @@ namespace CreationDateSync
             return 0;
         }
 
-        private static string GetRepositoryPath()
+        private static string? GetRepositoryPath()
         {
             var currentDirectory = Directory.GetCurrentDirectory();
             var repositoryPath = Repository.Discover(currentDirectory);

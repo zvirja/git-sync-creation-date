@@ -120,7 +120,7 @@ class Build : NukeBuild
         {
             var env = AppVeyorEnv;
             var trigger = ResolveAppVeyorTrigger();
-            Info($"Is tag: {env.RepositoryTag}, tag name: '{env.RepositoryTagName}', PR number: {env.PullRequestNumber}, branch name: '{env.RepositoryBranch}', trigger: {trigger}");
+            Info($"Is tag: {env.RepositoryTag}, tag name: '{env.RepositoryTagName}', PR number: {env.PullRequestNumber?.ToString() ?? "<null>"}, branch name: '{env.RepositoryBranch}', trigger: {trigger}");
         });
 
     Target AppVeyor_Pipeline => _ => _
