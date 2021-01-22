@@ -23,25 +23,48 @@ namespace CreationDateSync
                     "Date and time to use for files that were committed in the first commit. Useful if repo was migrated from other place. " +
                     "Format: DateTime in ISO format (e.g. 1994-02-13 or 1994-02-13T17:14:00). " +
                     "Default: Use initial commit date and time."),
-                new Option<FileInfo>(
-                    "--creation-time-file",
-                    "File with date and time to use for files that were committed in the first commit. Useful if repo was migrated from other place. " +
+                new Option<FileInfo?>(
+                    "--creation-time-txt-file",
+                    "Path to a text file with creation stamps for files which were created prior to the first commit. Useful if repo was migrated from other place. " +
                     "Format: A line per file. Each line should contain {relativePath}:DateTime pairs. " +
-                    "Default: Use initial commit date and time.")
+                    "Default: Use initial commit date and time."),
+                new Option<FileInfo?>(
+                    "--creation-time-bin-file",
+                    "Path to a binary file with creation stamps for files which were created prior to the first commit. Useful if repo was migrated from other place. " +
+                    "Default: Use initial commit date and time."),
+                new Option<string>(
+                    "--creation-time-file-prefix",
+                    "Path to a folder which should be used as a repo root. Allows to import a subset of the file entries only. " +
+                    "Specify a slash ('/') to read the whole file.")
             };
             rootCmd.Description = "Scan the repository and update the File Creation attribute for committed files to match the dates files appeared in the commit history";
-            rootCmd.Handler = CommandHandler.Create<DateTimeOffset?, FileInfo?>(Run);
+            rootCmd.Handler = CommandHandler.Create<DateTimeOffset?, FileInfo?, FileInfo?, string?>(Run);
 
             return await rootCmd.InvokeAsync(args);
         }
 
-        private static int Run(DateTimeOffset? creationTime, FileInfo? creationTimeFile)
+        private static int Run(DateTimeOffset? creationTime, FileInfo? creationTimeTxtFile, FileInfo? creationTimeBinFile, string? creationTimeFilePrefix)
         {
             WriteLineConsole(
                 "Scanning the repository and updating the File Creation attribute for committed files to match the dates files appeared in the commit history." +
                 Environment.NewLine +
                 "Written by Oleksandr Povar (@zvirja)", ConsoleColor.DarkGray);
             WriteNewLine();
+
+            if (creationTimeTxtFile != null && creationTimeBinFile != null)
+            {
+                WriteError("Cannot specify both 'txt' and 'bin' files in the same time.");
+                return 1;
+            }
+
+            if ((creationTimeTxtFile != null || creationTimeBinFile != null) && string.IsNullOrEmpty(creationTimeFilePrefix))
+            {
+                WriteError("The --creation-time-file-prefix parameter should be specified when importing file. Set it to '/' to import the whole file.");
+                return 1;
+            }
+
+            // Normalize slashes
+            creationTimeFilePrefix = creationTimeFilePrefix?.Replace("\\", "/");
 
             var sw = Stopwatch.StartNew();
 
@@ -61,11 +84,27 @@ namespace CreationDateSync
 
                 var creationStamps = new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase);
 
-                if (creationTimeFile != null)
+                if (creationTimeTxtFile != null)
                 {
-                    WriteConsole("Importing creation time from file... ");
-                    var importedCount = ImportCreationStampsFromFile(creationTimeFile, creationStamps);
-                    WriteLineConsole($"Done! Imported {importedCount} records.", ConsoleColor.DarkGreen);
+                    WriteConsole($"Importing creation time from text file (with prefix to import: '{creationTimeFilePrefix}')... ");
+                    var stats = ImportCreationStampsFromTextFile(creationTimeTxtFile, creationTimeFilePrefix!, creationStamps);
+                    WriteLineConsole($"Done! Imported records: {stats.imported}, skipped due to prefix mismatch: {stats.skipped}.", ConsoleColor.DarkGreen);
+                }
+
+                if (creationTimeBinFile != null)
+                {
+                    WriteConsole("Deserializing binary file with creation stamps to memory... ");
+                    var treeInfo = BinaryCreationFileTime.Deseriazize(creationTimeBinFile);
+                    WriteLineConsole("Done!", ConsoleColor.DarkGreen);
+
+                    WriteConsole($"Importing creation time from bin file (with prefix to import: '{creationTimeFilePrefix}')... ");
+                    int importCount = 0;
+                    foreach (var (path, time) in treeInfo.GetCreationStampsFromPath(creationTimeFilePrefix))
+                    {
+                        creationStamps[path] = time;
+                        importCount++;
+                    }
+                    WriteLineConsole($"Done! Imported records: {importCount}.", ConsoleColor.DarkGreen);
                 }
 
                 var initialCommitTimeDesc = creationTime != null ? $" (initial commit time: {creationTime.Value:s})" : string.Empty;
@@ -154,12 +193,16 @@ namespace CreationDateSync
             return repositoryPath;
         }
 
-        private static int ImportCreationStampsFromFile(FileInfo creationStampsFile, Dictionary<string, DateTimeOffset> stamps)
+        private static (int imported, int skipped) ImportCreationStampsFromTextFile(FileInfo creationStampsFile, string prefixToPath, Dictionary<string, DateTimeOffset> stamps)
         {
+            if (!prefixToPath.EndsWith('/'))
+                prefixToPath += "/";
+
             using var fileReader = creationStampsFile.OpenText();
 
             int linePos = -1;
             int importedCount = 0;
+            int skippedCount = 0;
 
             try
             {
@@ -170,13 +213,25 @@ namespace CreationDateSync
                     if(string.IsNullOrEmpty(line))
                         continue;
                     
+                    // Normalize slashes
+                    line = line!.Replace("\\", "/");
+
+                    if (prefixToPath != "/")
+                    {
+                        if (!line.StartsWith(prefixToPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            skippedCount++;
+                            continue;
+                        }
+ 
+                        // Relative path starts inside the folder specified by prefix
+                        line = line.Substring(prefixToPath.Length);
+                    }
+
                     var pair = line.Split(':', StringSplitOptions.RemoveEmptyEntries);
                     var path = pair[0];
                     var stamp = pair[1];
  
-                    // Normalize slashes
-                    path = path.Replace("\\", "/");
-                    
                     stamps[path] = DateTimeOffset.Parse(stamp, CultureInfo.InvariantCulture);
                     importedCount++;
                 }
@@ -186,7 +241,7 @@ namespace CreationDateSync
                 throw new InvalidOperationException($"Wrong creation time file format. Error during parsing line {linePos}", ex);
             }
 
-            return importedCount;
+            return (importedCount, skippedCount);
         }
 
         private static int ImportCreationStampsFromCommits(IRepository repo, Dictionary<string, DateTimeOffset> stamps, DateTimeOffset? initialCommitTimeOverride)
