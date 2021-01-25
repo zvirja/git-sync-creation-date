@@ -16,8 +16,8 @@ namespace CreationDateSync
         [MessagePackObject]
         public class SerializedTree
         {
-            [Key(0)] public char[] Strings;
-            [Key(1)] public Node[] Nodes;
+            [Key(0)] public char[] Strings = Array.Empty<char>();
+            [Key(1)] public Node[] Nodes = Array.Empty<Node>();
 
             public IEnumerable<(string path, DateTime time)> GetCreationStampsFromPath(string rootPath)
             {

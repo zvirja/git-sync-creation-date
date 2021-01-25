@@ -97,7 +97,7 @@ namespace CreationDateSync
 
                     WriteConsole($"Importing creation time from bin file (with prefix to import: '{creationTimeFilePrefix}')... ");
                     int importCount = 0;
-                    foreach (var (path, time) in treeInfo.GetCreationStampsFromPath(creationTimeFilePrefix))
+                    foreach (var (path, time) in treeInfo.GetCreationStampsFromPath(creationTimeFilePrefix!))
                     {
                         creationStamps[path] = time;
                         importCount++;
