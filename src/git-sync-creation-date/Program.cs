@@ -78,6 +78,7 @@ namespace CreationDateSync
                 using var repo = new Repository(repositoryPath);
  
                 var repoWorkingDirectory = repo.Info.WorkingDirectory;
+                WriteLineConsole($"Current repo root: {repoWorkingDirectory}");
                 WriteLineConsole($"Current HEAD: {repo.Head.Tip.Sha} ({repo.Head.FriendlyName})");
 
                 var creationStamps = new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase);
