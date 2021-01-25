@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using LibGit2Sharp;
 using static CreationDateSync.ConsoleUtil;
@@ -37,7 +38,7 @@ namespace CreationDateSync
                     "Path to a folder which should be used as a repo root. Allows to import a subset of the file entries only. " +
                     "Specify a slash ('/') to read the whole file.")
             };
-            rootCmd.Description = "Scan the repository and update the File Creation attribute for committed files to match the dates files appeared in the commit history";
+            rootCmd.Description = GetHelpInfoLine();
             rootCmd.Handler = CommandHandler.Create<DateTimeOffset?, FileInfo?, FileInfo?, string?>(Run);
 
             return await rootCmd.InvokeAsync(args);
@@ -45,10 +46,7 @@ namespace CreationDateSync
 
         private static int Run(DateTimeOffset? creationTime, FileInfo? creationTimeTxtFile, FileInfo? creationTimeBinFile, string? creationTimeFilePrefix)
         {
-            WriteLineConsole(
-                "Scanning the repository and updating the File Creation attribute for committed files to match the dates files appeared in the commit history." +
-                Environment.NewLine +
-                "Written by Oleksandr Povar (@zvirja)", ConsoleColor.DarkGray);
+            WriteLineConsole(GetHelpInfoLine(), ConsoleColor.DarkGray);
             WriteNewLine();
 
             if (creationTimeTxtFile != null && creationTimeBinFile != null)
@@ -300,6 +298,14 @@ namespace CreationDateSync
             return repo.Diff
                 .Compare<TreeChanges>(null, repo.Head.Tip.Tree)
                 .Select(x => x.Path);
+        }
+
+        private static string GetHelpInfoLine()
+        {
+            var infoVersion = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>().InformationalVersion;
+            return 
+                $"Scan the repository and update the File Creation attribute for committed files to match the dates files appeared in the commit history.{Environment.NewLine}" +
+                $"Version {infoVersion}. Written by Oleksandr Povar (@zvirja)";
         }
     }
 }
